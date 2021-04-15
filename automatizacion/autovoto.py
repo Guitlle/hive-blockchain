@@ -8,6 +8,15 @@ import os
 import pickle
 import datetime
 
+weight = 100
+mingap = 30
+maxAge = datetime.timedelta(hours=4)
+minAge = datetime.timedelta(minutes=4)
+dryrun = False
+account = os.getenv("hiveaccount")
+user = Account(account)
+pkey = os.getenv("postingkey")
+
 # Attempt to load state from pickle file
 try:
   with open("state.pickle", "rb") as f:
@@ -23,16 +32,9 @@ votos = state["votos"]
 if len(votos) > 0:
   print("Último voto: ", votos[-1])
   print("Tiempo: ", datetime.datetime.now());
-  if votos[-1]["time"] > datetime.datetime.now() - datetime.timedelta(minutes=30):
-    print("último voto en menos de 30 minutos")
+  if votos[-1]["time"] > datetime.datetime.now() - datetime.timedelta(minutes=mingap):
+    print("último voto en menos de ", gap," minutos")
     exit()
-
-_2days = datetime.timedelta(days=2)
-_5mins = datetime.timedelta(minutes=2)
-dryrun = True
-account = os.getenv("hiveaccount")
-user = Account(account)
-pkey = os.getenv("postingkey")
 
 # Read the accounts to vote on
 with open("cuentas", "r") as f:
@@ -40,7 +42,6 @@ with open("cuentas", "r") as f:
 
 # Init hive
 hive = Hive(keys=[pkey])
-weight = 100
 votado = False
 
 # For each account
@@ -52,13 +53,13 @@ for cuenta in cuentas:
     age = h.time_elapsed()
     
     # Avoid curation reward penalty and voting on too old posts:
-    if age > _2days or age < _5mins: 
+    if age > maxAge or age < minAge: 
       print("Skipping")
       continue
     mivoto = h.get_vote_with_curation(account, raw_data=True)
     
     # If no vote was already made:
-    if mivoto is not None:
+    if mivoto is None:
       print("Votando")
       
       # Make transaction and broadcast:
