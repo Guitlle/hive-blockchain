@@ -33,7 +33,7 @@ if len(votos) > 0:
   print("Último voto: ", votos[-1])
   print("Tiempo: ", datetime.datetime.now());
   if votos[-1]["time"] > datetime.datetime.now() - datetime.timedelta(minutes=mingap):
-    print("último voto en menos de ", gap," minutos")
+    print("último voto en menos de ", mingap, " minutos")
     exit()
 
 # Read the accounts to vote on
@@ -44,46 +44,50 @@ with open("cuentas", "r") as f:
 hive = Hive(keys=[pkey])
 votado = False
 
+posts = []
+
 # For each account
 for cuenta in cuentas:
   print("Cuenta ", cuenta)
   #  Read the last discussion and vote if haven't already voted:
   for h in discussions.Discussions_by_author_before_date(cuenta, limit=1):
-    print("Post https://hive.blog/@"  + cuenta + "/" + h.permlink, " | ", h["created"],  " | ", h.reward)
     age = h.time_elapsed()
     
     # Avoid curation reward penalty and voting on too old posts:
     if age > maxAge or age < minAge: 
-      print("Skipping")
       continue
-    mivoto = h.get_vote_with_curation(account, raw_data=True)
     
-    # If no vote was already made:
+    mivoto = h.get_vote_with_curation(account, raw_data=True)
     if mivoto is None:
-      print("Votando")
-      
-      # Make transaction and broadcast:
-      tx = TransactionBuilder(blockchain_instance=hive)
-      tx.appendOps(Vote(**{
-        "voter": account,
-        "author": cuenta,
-        "permlink": h.permlink,
-        "weight": int(float(weight) * 100)
-      }))
+      posts.append(h)
+      print("Post https://hive.blog/@"  + cuenta + "/" + h.permlink, " | ", h["created"],  " | ", h.reward)
+    
 
-      tx.appendWif(pkey)
-      signed_tx = tx.sign()
-      if not dryrun:
-        broadcast_tx = tx.broadcast(trx_id=True)
-      
-      votado = True
-      votos.append({
-          "time": datetime.datetime.now(),
-          "permlink": h.permlink, "author": h.author,
-          "rewards": float(h.reward)
-        })
-  if votado is True:
-    break
+if len(posts) > 0:
+    postsordered = sorted(posts, key = lambda x: datetime.datetime.timestamp(x["created"]), reverse = True )
+    h = postsordered[0]
+    print("\n\nVotando post https://hive.blog/@"  + h.author+ "/" + h.permlink, " | ", h["created"],  " | ", h.reward)
+    
+    # Make transaction and broadcast:
+    tx = TransactionBuilder(blockchain_instance=hive)
+    tx.appendOps(Vote(**{
+      "voter": account,
+      "author": h.author,
+      "permlink": h.permlink,
+      "weight": int(float(weight) * 100)
+    }))
+
+    tx.appendWif(pkey)
+    signed_tx = tx.sign()
+    if not dryrun:
+      broadcast_tx = tx.broadcast(trx_id=True)
+    
+    votado = True
+    votos.append({
+        "time": datetime.datetime.now(),
+        "permlink": h.permlink, "author": h.author,
+        "rewards": float(h.reward)
+      })
 
 # Update and save script state  
 with open("state.pickle", "wb") as f:
